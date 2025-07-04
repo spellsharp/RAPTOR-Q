@@ -98,20 +98,37 @@ class QuestionPaperGenerator:
             return self._generate_fallback_questions(file_path, num_questions, difficulty, question_types)
     
     def _extract_document_content(self, file_path):
-        """Extract content from various document formats"""
+        """Extract content from various document formats with robust error handling"""
         try:
-            if file_path.lower().endswith('.pdf'):
+            if not file_path or not os.path.exists(file_path):
+                return "Error: File not found or path is invalid"
+            
+            file_extension = file_path.lower().split('.')[-1] if '.' in file_path else ''
+            
+            if file_extension == 'pdf':
                 return self._extract_pdf_content(file_path)
-            elif file_path.lower().endswith(('.doc', '.docx')):
+            elif file_extension in ['doc', 'docx']:
                 return self._extract_word_content(file_path)
-            elif file_path.lower().endswith('.txt'):
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    return f.read()
+            elif file_extension == 'txt':
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        return content if content.strip() else "Error: Text file is empty"
+                except UnicodeDecodeError:
+                    # Try different encodings
+                    for encoding in ['latin-1', 'cp1252', 'iso-8859-1']:
+                        try:
+                            with open(file_path, 'r', encoding=encoding) as f:
+                                content = f.read()
+                                return content if content.strip() else "Error: Text file is empty"
+                        except UnicodeDecodeError:
+                            continue
+                    return "Error: Unable to decode text file with any encoding"
             else:
-                raise ValueError(f"Unsupported file format: {file_path}")
+                return f"Error: Unsupported file format '.{file_extension}'. Supported formats: PDF, DOCX, DOC, TXT"
         except Exception as e:
             print(f"Error extracting document content: {e}")
-            return "Document content could not be extracted."
+            return f"Error: Document content could not be extracted - {str(e)}"
     
     def _extract_pdf_content(self, file_path):
         """Extract content from PDF files"""
@@ -147,94 +164,145 @@ class QuestionPaperGenerator:
             return "Word document content could not be extracted."
     
     def _preprocess_document_content(self, document_content):
-        """Preprocess document content for better question generation"""
-        
-        # Split into chunks for better processing
-        if len(document_content) > 3000:
-            chunks = self.text_splitter.split_text(document_content)
-            # Use the most relevant chunks or summarize
-            document_content = ' '.join(chunks[:2])  # Take first 2 chunks
-        
-        # Clean up formatting
+        """Clean up document content formatting"""
+        # Clean up formatting only - chunking is handled separately
         document_content = re.sub(r'\s+', ' ', document_content)
         document_content = re.sub(r'\n+', '\n', document_content)
-        
         return document_content.strip()
     
-    def _get_content_chunks(self, document_content, max_chunk_size=600):
-        """Split document content into chunks for variety in question generation"""
-        if len(document_content) <= max_chunk_size:
-            return [document_content]
-        
-        # Split by sentences first, then by paragraphs if needed
-        sentences = re.split(r'[.!?]+', document_content)
-        chunks = []
-        current_chunk = ""
-        
-        for sentence in sentences:
-            sentence = sentence.strip()
-            if not sentence:
-                continue
-                
-            # If adding this sentence would exceed the limit, start a new chunk
-            if len(current_chunk) + len(sentence) + 1 > max_chunk_size and current_chunk:
-                chunks.append(current_chunk.strip())
-                current_chunk = sentence
-            else:
-                current_chunk += (" " + sentence if current_chunk else sentence)
-        
-        # Add the last chunk
-        if current_chunk.strip():
-            chunks.append(current_chunk.strip())
-        
-        # If we still don't have enough chunks, create overlapping chunks
-        if len(chunks) < 3:
-            # Create overlapping chunks of max_chunk_size
-            chunks = []
-            for i in range(0, len(document_content), max_chunk_size // 2):
-                chunk = document_content[i:i + max_chunk_size]
-                if chunk.strip():
-                    chunks.append(chunk.strip())
-                if len(chunks) >= 5:  # Limit to avoid too many chunks
-                    break
-        
-        return chunks if chunks else [document_content[:max_chunk_size]]
-    
-    def _generate_single_question(self, document_content, question_type, difficulty, question_number, previous_questions=None):
-        """Generate a single question using a much simpler approach"""
+    def _get_content_chunks(self, document_content, max_chunk_size=3000):
+        """Split document content into meaningful chunks for question generation"""
         try:
-            if self.lm_studio_llm is None:
-                return self._generate_fallback_single_question(document_content, question_type, difficulty, question_number)
+            if not document_content or not document_content.strip():
+                return ["No content available for question generation"]
             
-            # Create a very simple, direct prompt
-            prompt = self._create_simple_prompt(document_content, question_type, difficulty, previous_questions)
+            if len(document_content) <= max_chunk_size:
+                return [document_content]
             
-            # Get response from LLM
-            response = self.lm_studio_llm.invoke(prompt)
+            # First try to split by paragraphs (double newlines)
+            paragraphs = document_content.split('\n\n')
+            chunks = []
+            current_chunk = ""
             
-            # Debug: print raw response (can be disabled in production)
-            self._debug_llm_response(response, question_type, question_number)
+            for paragraph in paragraphs:
+                paragraph = paragraph.strip()
+                if not paragraph:
+                    continue
+                    
+                # If adding this paragraph would exceed the limit, start a new chunk
+                if len(current_chunk) + len(paragraph) + 2 > max_chunk_size and current_chunk:
+                    chunks.append(current_chunk.strip())
+                    current_chunk = paragraph
+                else:
+                    current_chunk += ("\n\n" + paragraph if current_chunk else paragraph)
             
-            # Use simple parsing
-            question, answer = self._simple_parse_response(response, question_type, question_number)
+            # Add the last chunk
+            if current_chunk.strip():
+                chunks.append(current_chunk.strip())
             
-            return question, answer
+            # If paragraphs are too large, split by sentences
+            if not chunks or max(len(chunk) for chunk in chunks) > max_chunk_size:
+                chunks = []
+                sentences = re.split(r'(?<=[.!?])\s+', document_content)
+                current_chunk = ""
+                
+                for sentence in sentences:
+                    sentence = sentence.strip()
+                    if not sentence:
+                        continue
+                        
+                    if len(current_chunk) + len(sentence) + 1 > max_chunk_size and current_chunk:
+                        chunks.append(current_chunk.strip())
+                        current_chunk = sentence
+                    else:
+                        current_chunk += (" " + sentence if current_chunk else sentence)
+                
+                if current_chunk.strip():
+                    chunks.append(current_chunk.strip())
+            
+            # Ensure we have at least one chunk
+            return chunks if chunks else [document_content[:max_chunk_size]]
             
         except Exception as e:
-            print(f"Error generating single question: {e}")
+            print(f"Error in content chunking: {e}")
+            # Return a safe fallback
+            return [document_content[:max_chunk_size] if document_content else "No content available"]
+    
+    def _generate_single_question(self, document_content, question_type, difficulty, question_number, previous_questions=None):
+        """Generate a single question with smart retry mechanism"""
+        if self.lm_studio_llm is None:
+            return self._generate_fallback_single_question(document_content, question_type, difficulty, question_number)
+        
+        try:
+            # Clean document content
+            document_content = self._preprocess_document_content(document_content)
+            content_chunks = self._get_content_chunks(document_content, 3000)
+            
+            # Try different chunks until we get a valid question
+            max_attempts = min(len(content_chunks), 3)  # Try up to 3 chunks
+            
+            for attempt in range(max_attempts):
+                try:
+                    # Calculate chunk index (start with the rotation index, then try others)
+                    base_chunk_index = len(previous_questions or []) % len(content_chunks)
+                    chunk_index = (base_chunk_index + attempt) % len(content_chunks)
+                    
+                    print(f"ATTEMPT {attempt + 1}: Trying chunk {chunk_index + 1}/{len(content_chunks)} (length: {len(content_chunks[chunk_index])})")
+                    
+                    # Create prompt with this specific chunk
+                    prompt = self._create_prompt(
+                        document_content, 
+                        question_type, 
+                        difficulty, 
+                        previous_questions,
+                        specific_chunk=content_chunks[chunk_index]
+                    )
+                    
+                    # Get response from LLM
+                    response = self.lm_studio_llm.invoke(prompt)
+                    
+                    # Debug: print raw response
+                    self._debug_llm_response(response, question_type, question_number, attempt + 1)
+                    
+                    # Parse the response
+                    question, answer = self._parse_response(response, question_type, question_number)
+                    
+                    # Check if we got a valid question (not a fallback)
+                    if not self._is_fallback_question(question['text']):
+                        print(f"SUCCESS: Generated valid question on attempt {attempt + 1}")
+                        return question, answer
+                    else:
+                        print(f"ATTEMPT {attempt + 1} FAILED: Got fallback question, trying next chunk...")
+                        
+                except Exception as attempt_error:
+                    print(f"ATTEMPT {attempt + 1} ERROR: {attempt_error}")
+                    continue
+            
+            # If all chunks failed, generate a fallback question
+            print(f"ALL ATTEMPTS FAILED: Using fallback question after {max_attempts} attempts")
+            return self._generate_fallback_single_question(document_content, question_type, difficulty, question_number)
+            
+        except Exception as e:
+            print(f"Error in question generation: {e}")
             return self._generate_fallback_single_question(document_content, question_type, difficulty, question_number)
     
-    def _create_simple_prompt(self, document_content, question_type, difficulty, previous_questions=None):
-        """Create a very simple, direct prompt"""
+    def _create_prompt(self, document_content, question_type, difficulty, previous_questions=None, specific_chunk=None):
+        """Create a prompt for question generation"""
         
-        # Use different chunks of content for variety
-        content_chunks = self._get_content_chunks(document_content, 600)
+        if specific_chunk is not None:
+            # Use the provided chunk
+            selected_content = specific_chunk
+            print(f"CHUNK CONTENT PREVIEW: {selected_content[:100]}...")
+        else:
+            # Use different chunks of content for variety
+            content_chunks = self._get_content_chunks(document_content, 3000)
+            
+            # Select a chunk based on how many questions we've already asked
+            chunk_index = len(previous_questions or []) % len(content_chunks)
+            selected_content = content_chunks[chunk_index]
+            
+            print(f"CHUNK DEBUG: Using chunk {chunk_index + 1}/{len(content_chunks)} (length: {len(selected_content)})")
         
-        # Select a chunk based on how many questions we've already asked
-        chunk_index = len(previous_questions or []) % len(content_chunks)
-        selected_content = content_chunks[chunk_index]
-        
-        print(f"CHUNK DEBUG: Using chunk {chunk_index + 1}/{len(content_chunks)} (length: {len(selected_content)})")
         if previous_questions:
             print(f"AVOIDING {len(previous_questions)} previous questions")
         
@@ -242,12 +310,13 @@ class QuestionPaperGenerator:
         previous_questions_text = ""
         if previous_questions and len(previous_questions) > 0:
             previous_questions_text = "\nDO NOT REPEAT THESE QUESTIONS:\n"
-            for i, prev_q in enumerate(previous_questions, 1):
+            for i, prev_q in enumerate(previous_questions[:5], 1):  # Limit to 5 to avoid overly long prompts
                 previous_questions_text += f"{i}. {prev_q}\n"
             previous_questions_text += "\n"
         
-        if question_type == 'multiple_choice':
-            return f"""TEXT: {selected_content}{previous_questions_text}
+        # Generate prompt based on question type
+        prompt_templates = {
+            'multiple_choice': f"""TEXT: {selected_content}{previous_questions_text}
 TASK: Write EXACTLY 1 NEW multiple choice question. Use ONLY this format:
 
 Q: [question]
@@ -257,28 +326,42 @@ C) [option]
 D) [option]
 ANSWER: A
 
-NO other text allowed."""
+NO other text allowed.""",
 
-        elif question_type == 'short_answer':
-            return f"""TEXT: {selected_content}{previous_questions_text}
+            'short_answer': f"""TEXT: {selected_content}{previous_questions_text}
 TASK: Write EXACTLY 1 NEW short answer question. Use ONLY this format:
 
 Q: [question]
-A: [answer]
+A: [answer around 70 words]
 
-NO other text allowed."""
+NO other text allowed.""",
 
-        else:  # essay
-            return f"""TEXT: {selected_content}{previous_questions_text}
+            'essay': f"""TEXT: {selected_content}{previous_questions_text}
 TASK: Write EXACTLY 1 NEW essay question. Use ONLY this format:
 
 Q: [question]
-A: [answer]
+A: [comprehensive answer around 150 words]
 
 NO other text allowed."""
+        }
+        
+        return prompt_templates.get(question_type, prompt_templates['short_answer'])
     
-    def _simple_parse_response(self, response, question_type, question_number):
-        """Super simple parsing - just grab what we can"""
+    def _is_fallback_question(self, question_text):
+        """Check if a question is a generic fallback question"""
+        fallback_phrases = [
+            "what is discussed in the document",
+            "what is the main topic",
+            "explain the main concepts",
+            "based on the document, explain",
+            "what does the document discuss"
+        ]
+        
+        question_lower = question_text.lower()
+        return any(phrase in question_lower for phrase in fallback_phrases)
+    
+    def _parse_response(self, response, question_type, question_number):
+        """Parse LLM response with multi-line answer support"""
         
         try:
             lines = response.strip().split('\n')
@@ -297,24 +380,21 @@ NO other text allowed."""
                     print(f"PARSING DEBUG: Found question: '{question_text}'")
                     break
             
-            # Find answer (line starting with A: or ANSWER:)
-            for line in lines:
-                line = line.strip()
-                if line.startswith('A:'):
-                    answer_text = line[2:].strip()
-                    print(f"PARSING DEBUG: Found answer: '{answer_text}'")
-                    break
-                elif line.startswith('ANSWER:'):
-                    answer_text = line[7:].strip()
-                    print(f"PARSING DEBUG: Found answer (ANSWER:): '{answer_text}'")
-                    break
-            
-            # For multiple choice, find options
+            # Find answer with multi-line support
             if question_type == 'multiple_choice':
+                # For multiple choice, find options first
                 for line in lines:
                     line = line.strip()
                     if re.match(r'^[A-D]\)', line):
                         options.append(line)
+                
+                # Find the correct answer
+                for line in lines:
+                    line = line.strip()
+                    if line.startswith('ANSWER:'):
+                        answer_text = line[7:].strip()
+                        print(f"PARSING DEBUG: Found answer (ANSWER:): '{answer_text}'")
+                        break
                 
                 print(f"PARSING DEBUG: Found {len(options)} options")
                 
@@ -322,6 +402,46 @@ NO other text allowed."""
                 if len(options) != 4:
                     options = ["A) Option A", "B) Option B", "C) Option C", "D) Option D"]
                     print("PARSING DEBUG: Using default options")
+            else:
+                # For short answer and essay, collect multi-line answers
+                answer_started = False
+                answer_lines = []
+                
+                for i, line in enumerate(lines):
+                    line = line.strip()
+                    if line.startswith('A:'):
+                        answer_started = True
+                        # Add the answer text after "A:"
+                        answer_content = line[2:].strip()
+                        if answer_content:
+                            answer_lines.append(answer_content)
+                    elif answer_started and line:
+                        # Check if this is a new section starting
+                        if line.startswith(('Q:', 'TASK:', 'TEXT:', 'NO other text')):
+                            break
+                        # Otherwise, this is part of the answer
+                        answer_lines.append(line)
+                    elif answer_started and not line:
+                        # Empty line - check if next line is continuation
+                        if i + 1 < len(lines):
+                            next_line = lines[i + 1].strip()
+                            if next_line and not next_line.startswith(('Q:', 'TASK:', 'TEXT:', 'NO other text')):
+                                # Next line is continuation, add empty line
+                                answer_lines.append('')
+                            else:
+                                # Next line is new section, stop here
+                                break
+                        else:
+                            # End of response, stop here
+                            break
+                
+                # Join answer lines properly
+                if answer_lines:
+                    # Remove trailing empty lines
+                    while answer_lines and not answer_lines[-1].strip():
+                        answer_lines.pop()
+                    answer_text = '\n'.join(answer_lines)
+                    print(f"PARSING DEBUG: Found multi-line answer: '{answer_text[:50]}...'")
             
             # Extra fallback: if still no Q: found, look for any question mark
             if not question_text:
@@ -333,8 +453,8 @@ NO other text allowed."""
                         print(f"PARSING DEBUG: Found question by ?: '{question_text}'")
                         break
             
-            # Extra fallback: if still no answer, look for any substantial text
-            if not answer_text:
+            # Extra fallback: if still no answer for non-multiple choice
+            if not answer_text and question_type != 'multiple_choice':
                 print("PARSING DEBUG: No A: found, looking for substantial text...")
                 for line in lines:
                     line = line.strip()
@@ -386,161 +506,47 @@ NO other text allowed."""
             "D) Option D"
         ]
     
-    def _clean_question_text(self, text, question_type):
-        """Clean and validate question text"""
-        # Remove extra whitespace and newlines
-        text = re.sub(r'\s+', ' ', text.strip())
-        
-        # Remove leading question numbers/markers if already present
-        text = re.sub(r'^(?:question\s*\d*[.:]?\s*|q\d*[.:]?\s*|\d+[.)]?\s*)', '', text, flags=re.IGNORECASE)
-        
-        # Ensure question ends appropriately
-        if question_type in ['multiple_choice', 'short_answer']:
-            if not text.endswith('?'):
-                text += '?'
-        elif question_type == 'essay':
-            if not text.endswith(('.', '?', ':')):
-                text += '.'
-        
-        # Capitalize first letter
-        if text:
-            text = text[0].upper() + text[1:]
-        
-        return text
-    
-    def _clean_answer_text(self, text, question_type):
-        """Clean and validate answer text"""
-        # Remove extra whitespace and newlines
-        text = re.sub(r'\s+', ' ', text.strip())
-        
-        # Remove common answer prefixes
-        text = re.sub(r'^(?:answer:|a:|the answer is:?|correct answer:?)\s*', '', text, flags=re.IGNORECASE)
-        
-        # Capitalize first letter if it's not already capitalized
-        if text and text[0].islower():
-            text = text[0].upper() + text[1:]
-        
-        return text
+
     
     def _extract_correct_answer(self, response, options):
         """Extract the correct answer for multiple choice questions"""
         
-        # Look for patterns indicating correct answer
-        correct_patterns = [
-            r'(?:correct answer|answer):\s*([A-D])\)',
-            r'(?:correct|answer):\s*([A-D])',
-            r'(?:the answer is|answer is):\s*([A-D])\)',
-            r'(?:the answer is|answer is):\s*([A-D])',
-            r'\b([A-D])\s*(?:is correct|is the answer)',
-        ]
+        # Look for lines starting with "ANSWER:" 
+        lines = response.strip().split('\n')
+        for line in lines:
+            line = line.strip()
+            if line.startswith('ANSWER:'):
+                answer_letter = line[7:].strip()
+                if answer_letter in ['A', 'B', 'C', 'D']:
+                    return answer_letter
         
-        for pattern in correct_patterns:
-            match = re.search(pattern, response, re.IGNORECASE)
-            if match:
-                letter = match.group(1).upper()
-                # Find the corresponding option
-                for option in options:
-                    if option.startswith(f"{letter})"):
-                        return option
-        
-        return None
+        # Default to A if no answer found
+        return 'A'
     
     def _extract_multiple_choice_options(self, response):
-        """Extract multiple choice options from LLM response with robust parsing"""
+        """Extract multiple choice options from LLM response with simple parsing"""
         
         try:
             options = []
+            lines = response.strip().split('\n')
             
-            # Multiple patterns to match different option formats
-            option_patterns = [
-                r'([A-D])\)\s*(.+?)(?=\n[A-D]\)|$)',  # A) option text
-                r'([A-D])\.\s*(.+?)(?=\n[A-D]\.|$)',  # A. option text
-                r'([A-D]):\s*(.+?)(?=\n[A-D]:|$)',    # A: option text
-                r'([A-D])\s*-\s*(.+?)(?=\n[A-D]\s*-|$)',  # A - option text
-                r'\(([A-D])\)\s*(.+?)(?=\n\([A-D]\)|$)',  # (A) option text
-            ]
+            # Look for lines starting with A), B), C), D)
+            for line in lines:
+                line = line.strip()
+                if re.match(r'^[A-D]\)', line):
+                    options.append(line)
             
-            # Try each pattern
-            for pattern in option_patterns:
-                matches = re.findall(pattern, response, re.IGNORECASE | re.MULTILINE)
-                if matches and len(matches) >= 2:  # Need at least 2 options to be valid
-                    options = []
-                    for letter, text in matches:
-                        if letter.upper() in ['A', 'B', 'C', 'D']:
-                            # Clean up the option text
-                            text = re.sub(r'\s+', ' ', text.strip())
-                            # Remove trailing punctuation except periods that are part of content
-                            text = re.sub(r'[,;]\s*$', '', text)
-                            if text:  # Only add non-empty options
-                                options.append(f"{letter.upper()}) {text}")
-                    
-                    if len(options) >= 2:  # Valid set of options found
-                        break
-            
-            # Fallback: try to find options in a more flexible way
-            if len(options) < 2:
-                lines = response.split('\n')
-                option_lines = []
+            # If we found valid options, return them
+            if len(options) >= 2:
+                # Ensure we have exactly 4 options
+                while len(options) < 4:
+                    next_letter = chr(ord('A') + len(options))
+                    options.append(f"{next_letter}) Additional option")
                 
-                for line in lines:
-                    line = line.strip()
-                    # Look for lines that might be options
-                    if re.match(r'^[A-D][.):\-]\s*\w+', line, re.IGNORECASE):
-                        option_lines.append(line)
-                    elif re.match(r'^\([A-D]\)\s*\w+', line, re.IGNORECASE):
-                        option_lines.append(line)
-                    elif re.match(r'^\d+[.)]\s*\w+', line) and len(option_lines) < 4:
-                        # Convert numbered options to lettered ones
-                        num = line[0]
-                        if num in '1234':
-                            letter = ['A', 'B', 'C', 'D'][int(num) - 1]
-                            text = re.sub(r'^\d+[.)]\s*', '', line)
-                            option_lines.append(f"{letter}) {text}")
-                
-                if len(option_lines) >= 2:
-                    options = option_lines[:4]  # Take at most 4 options
+                return options[:4]  # Return only first 4 options
             
-            # Ensure we have exactly 4 options with proper formatting
-            if len(options) < 4:
-                # Fill in missing options or create defaults
-                expected_letters = ['A', 'B', 'C', 'D']
-                existing_letters = []
-                
-                # Extract existing letters
-                for opt in options:
-                    match = re.match(r'^([A-D])', opt)
-                    if match:
-                        existing_letters.append(match.group(1))
-                
-                # Add missing options
-                for letter in expected_letters:
-                    if letter not in existing_letters:
-                        if len(options) < 4:
-                            options.append(f"{letter}) Option {letter}")
-            
-            # Clean up and standardize format
-            standardized_options = []
-            for i, option in enumerate(options[:4]):  # Ensure max 4 options
-                letter = ['A', 'B', 'C', 'D'][i]
-                # Extract just the text part
-                text_match = re.search(r'^[A-D][.):\-]\s*(.+)', option, re.IGNORECASE)
-                if text_match:
-                    text = text_match.group(1).strip()
-                else:
-                    text = f"Option {letter}"
-                
-                standardized_options.append(f"{letter}) {text}")
-            
-            # Final fallback if still no valid options
-            if len(standardized_options) < 4:
-                standardized_options = [
-                    "A) Option A",
-                    "B) Option B", 
-                    "C) Option C",
-                    "D) Option D"
-                ]
-            
-            return standardized_options[:4]  # Return exactly 4 options
+            # If no valid options found, return default
+            return ["A) Option A", "B) Option B", "C) Option C", "D) Option D"]
             
         except Exception as e:
             print(f"Error extracting multiple choice options: {e}")
@@ -734,9 +740,10 @@ NO other text allowed."""
             print(f"Error generating PDF: {e}")
             raise Exception(f"PDF generation failed: {str(e)}")
     
-    def _debug_llm_response(self, response, question_type, question_number):
+    def _debug_llm_response(self, response, question_type, question_number, attempt=None):
         """Debug method to see what the LLM is actually returning"""
-        print(f"\n=== DEBUG: Question {question_number} ({question_type}) ===")
+        attempt_text = f" (Attempt {attempt})" if attempt else ""
+        print(f"\n=== DEBUG: Question {question_number} ({question_type}){attempt_text} ===")
         print(f"Raw LLM Response:")
         print(f"'{response}'")
         print(f"Response length: {len(response)}")

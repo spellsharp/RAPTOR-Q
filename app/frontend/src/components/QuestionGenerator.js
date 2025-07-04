@@ -22,7 +22,7 @@ const QuestionGenerator = () => {
   const [generatedQuestions, setGeneratedQuestions] = useState(null);
   const [generatedAnswers, setGeneratedAnswers] = useState(null);
   const [config, setConfig] = useState({
-    numQuestions: 10,
+    numQuestions: 5,
     difficulty: 'easy',
     questionTypes: ['short_answer']
   });
