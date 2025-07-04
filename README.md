@@ -82,7 +82,7 @@ A cutting-edge AI-powered question paper generation system that leverages advanc
 
 ### **One-Click Setup**
 ```bash
-git clone <repository-url>
+git clone https://github.com/spellsharp/RAPTOR-Q.git
 cd VelociRAPTOR-Question-Generator
 chmod +x start.sh
 ./start.sh
@@ -396,7 +396,7 @@ Format: QUESTION: [question] ANSWER: [answer]
 ### **Development Setup**
 ```bash
 # Clone repository
-git clone <repository-url>
+git clone https://github.com/spellsharp/RAPTOR-Q.git
 cd VelociRAPTOR-Question-Generator
 
 # Setup development environment

@@ -1,136 +1,97 @@
 # 🚀 Quick Start Guide
 
-## Ready to Use! 
+Get VelociRAPTOR Question Paper Generator running in **one command**!
 
-Your VelociRAPTOR Question Paper Generator website is now **fully functional**! Here's how to get started:
+## ⚡ One-Click Setup
 
-## ✅ What's Working
-
-- ✅ **Backend**: Flask API with all dependencies resolved
-- ✅ **Frontend**: React app with modern UI and animations  
-- ✅ **File Upload**: Drag-and-drop for PDF, DOC, DOCX, TXT
-- ✅ **Question Generation**: Ready for VelociRAPTOR integration
-- ✅ **PDF Export**: Professional question paper generation
-- ✅ **Responsive Design**: Beautiful UI that works on all devices
-
-## 🎯 Start the Application
-
-### Option 1: One-Click Start (Recommended)
 ```bash
 ./start.sh
 ```
 
-### Option 2: Manual Start
+That's it! The script will:
+- ✅ Check system requirements
+- ✅ Install all dependencies
+- ✅ Download LMStudio automatically
+- ✅ Configure API keys (interactive)
+- ✅ Start all servers
+- ✅ Test all components
+
+## 📋 Prerequisites
+
+- **Python 3.8+** - [Download](https://python.org)
+- **Node.js 14+** - [Download](https://nodejs.org)
+- **2GB+ free disk space** - For AI models
+
+## 🔑 API Keys Needed
+
+### Required: Hugging Face API Key
+1. Go to https://huggingface.co/settings/tokens
+2. Create a token with "Read" permissions
+3. Copy the key (starts with `hf_`)
+
+### Optional: LangSmith API Key
+1. Go to https://smith.langchain.com/settings
+2. Create API key for tracing
+3. Copy the key (starts with `lsv2_`)
+
+## 🎯 Usage
+
+1. **Run the setup script:**
+   ```bash
+   ./start.sh
+   ```
+
+2. **Enter your API keys when prompted**
+
+3. **Wait for everything to install and start**
+
+4. **Open your browser:**
+   - Frontend: http://localhost:3000
+   - Backend: http://localhost:5000
+
+5. **Upload a document and generate questions!**
+
+## 🛠️ Manual Setup (if needed)
+
+If the automatic setup fails:
+
 ```bash
-# Terminal 1 - Backend
+# Backend
 cd app/backend
 python3 -m venv venv
 source venv/bin/activate
-pip install --upgrade pip setuptools wheel
-pip install Flask Flask-CORS python-dotenv reportlab PyPDF2 python-docx requests numpy pydantic langchain langchain-community tiktoken
+pip install -r requirements.txt
 python app.py
 
-# Terminal 2 - Frontend  
+# Frontend (new terminal)
 cd app/frontend
 npm install
 npm start
 ```
 
-## 🌐 Access the Application
+## 🐛 Common Issues
 
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:5000
-- **Health Check**: http://localhost:5000/api/health
+**Script fails?**
+- Check you have Python 3.8+ and Node.js 14+
+- Ensure you have internet connection
+- Try running with `bash start.sh` instead
 
-## 🔧 VelociRAPTOR Integration
+**LMStudio not starting?**
+- The script handles the --no-sandbox flag automatically
+- You may need to manually load TinyLlama model in LMStudio
 
-To fully activate VelociRAPTOR's RAG capabilities:
+**API errors?**
+- Check your Hugging Face API key is valid
+- Edit `app/backend/.env` to update keys
 
-1. **Set up environment variables**:
-   ```bash
-   cp app/backend/config.example app/backend/.env
-   # Edit .env with your API keys
-   ```
+## 🎉 Success!
 
-2. **Required API Keys**:
-   - `LANGSMITH_API_KEY`: For LangSmith tracing
-   - `SUMMARIZER_API_KEY`: Hugging Face API key
+Once everything is running:
+- Upload PDF/DOC files via the web interface
+- Configure question parameters
+- Generate professional question papers
+- Download as PDF with answer keys
 
-3. **Start LMStudio**:
-   - Install and run LMStudio locally
-   - Load `llama-3.2-3b-instruct` model
+---
 
-## 🎨 Features Available Now
-
-### 📤 File Upload
-- Drag and drop files or click to select
-- Supports PDF, DOC, DOCX, TXT
-- Real-time upload progress
-
-### ⚙️ Configuration
-- Number of questions (1-50)
-- Difficulty levels (Easy, Medium, Hard)
-- Question types (Multiple Choice, Short Answer, Essay)
-
-### 📋 Question Generation
-- AI-powered question creation
-- Automatic answer key generation
-- Context-aware from uploaded documents
-
-### 📄 PDF Export
-- Professional question paper format
-- Separate answer key section
-- Ready for printing
-
-## 🔍 Testing the Setup
-
-1. **Test Backend**:
-   ```bash
-   curl http://localhost:5000/api/health
-   ```
-
-2. **Test Frontend**: 
-   - Open http://localhost:3000
-   - Navigate through the interface
-   - Upload a test document
-
-## 📱 User Interface
-
-- **Home**: Welcome page with features overview
-- **Generate**: Upload documents and create question papers
-- **View**: Preview example question papers
-
-## 🚨 Troubleshooting
-
-### Common Issues:
-
-1. **Port already in use**:
-   ```bash
-   lsof -ti:5000 | xargs kill -9  # Kill process on port 5000
-   lsof -ti:3000 | xargs kill -9  # Kill process on port 3000
-   ```
-
-2. **Python dependencies**:
-   - Ensure Python 3.8+ is installed
-   - Use the staged installation in start.sh
-
-3. **Node.js dependencies**:
-   - Ensure Node.js 14+ is installed
-   - Run `npm install` in frontend directory
-
-## 🎊 Next Steps
-
-1. **Upload a document** via the web interface
-2. **Configure question settings** (count, difficulty, types)
-3. **Generate questions** using the AI pipeline
-4. **Download the PDF** with questions and answers
-
-Your website is ready to use! The fallback question generation will work immediately, and once you configure VelociRAPTOR with the proper API keys, you'll get the full AI-powered question generation experience.
-
-## 📞 Need Help?
-
-- Check the main README.md for detailed documentation
-- Ensure VelociRAPTOR is properly configured
-- Verify all API keys are set correctly
-
-**Happy Question Generation!** 🎓 
+**Need help?** Check the full [README.md](README.md) for detailed documentation. 
