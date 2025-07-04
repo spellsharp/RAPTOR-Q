@@ -2,6 +2,8 @@
 
 A cutting-edge AI-powered question paper generation system that leverages advanced RAG (Retrieval Augmented Generation) technology to create intelligent, contextually accurate question papers from uploaded documents.
 
+Credits: The application uses Satvik Mishra's VelociRAPTOR implementation. Click [link](https://github.com/satvshr/VelociRAPTOR.git)
+
 ![VelociRAPTOR Logo](https://img.shields.io/badge/VelociRAPTOR-Question_Generator-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Python-3.8+-blue?style=for-the-badge&logo=python)
