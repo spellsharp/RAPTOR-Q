@@ -1,0 +1,4 @@
+LANGSMITH_API_KEY=your_langsmith_api_key_here
+SUMMARIZER_API_KEY=your_huggingface_api_key_here
+LANGCHAIN_TRACING_V2=true
+FILE_PATH=./uploads/ 
