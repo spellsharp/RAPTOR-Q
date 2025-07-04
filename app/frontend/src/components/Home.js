@@ -23,7 +23,7 @@ const Home = () => {
     {
       icon: <Brain className="h-8 w-8 text-indigo-600" />,
       title: 'AI-Powered Generation',
-      description: 'Uses VelociRAPTOR\'s advanced RAG capabilities'
+      description: 'Uses RAPTOR-Q\'s advanced RAG capabilities'
     },
     {
       icon: <Settings className="h-8 w-8 text-indigo-600" />,
@@ -84,7 +84,7 @@ const Home = () => {
           <Zap className="h-16 w-16 text-indigo-600 mr-4" />
           <div className="text-left">
             <h1 className="text-5xl font-bold text-gray-800 mb-2">
-              VelociRAPTOR
+              RAPTOR-Q
             </h1>
             <p className="text-xl text-indigo-600 font-semibold">
               Question Paper Generator
@@ -193,7 +193,7 @@ const Home = () => {
               AI Generation
             </h3>
             <p className="text-gray-600">
-              VelociRAPTOR processes and generates questions
+              RAPTOR-Q processes and generates questions
             </p>
           </div>
           

@@ -158,18 +158,25 @@ class QuestionPaperGenerator:
             
             # Use VelociRAPTOR's pipeline to generate question and answer
             question_prompt = f"""
-            Based on the following document content, {base_question}.
-            
-            Document content: {document_content[:2000]}...
-            
-            Please provide:
-            1. The question
-            2. The answer (for multiple choice, provide options A, B, C, D and indicate the correct answer)
-            
-            Format your response as:
-            QUESTION: [Your question here]
-            ANSWER: [Your answer here]
+            You are an expert educational content creator.
+
+            Your task is to generate a {difficulty} level {question_type.replace('_', ' ')} question from the academic content provided below.
+
+            --- Document Content (excerpt) ---
+            {document_content[:2000]}
+            --- End of Content ---
+
+            Instructions:
+            - Base your question strictly on the above content.
+            - Ensure the question is clear and concise.
+            - If the question type is "multiple choice", provide four answer options labeled A), B), C), and D), and clearly indicate the correct answer.
+            - For "short answer" or "essay" types, provide an appropriate model answer.
+
+            Output Format:
+            QUESTION: <your question here>
+            ANSWER: <your answer here>
             """
+
 
             # question_prompt = f"""
             # Hi. How are you?

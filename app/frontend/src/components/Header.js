@@ -16,7 +16,7 @@ const Header = () => {
           <div className="flex items-center space-x-2">
             <Zap className="h-8 w-8 text-indigo-600" />
             <h1 className="text-2xl font-bold text-gray-800">
-              VelociRAPTOR
+              RAPTOR-Q
             </h1>
             <span className="text-sm text-gray-500 bg-indigo-100 px-2 py-1 rounded-full">
               Question Generator
