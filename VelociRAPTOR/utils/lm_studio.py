@@ -10,7 +10,7 @@ class LMStudioLLM(LLM):
     endpoint: str = Field(default=None)
 
     def __init__(self, path: str, **kwargs):
-        super().__init__(path=path, endpoint=f"http://localhost:1234/v1/{path}", **kwargs)
+        super().__init__(path=path, endpoint=f"http://192.168.64.21:1234/v1/{path}", **kwargs)
 
     def _call(self, prompt: str, stop: list = None) -> str:
         response = requests.post(self.endpoint, 

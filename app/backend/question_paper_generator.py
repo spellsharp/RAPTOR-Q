@@ -4,6 +4,7 @@ import json
 import tempfile
 import random
 import re
+import traceback
 from datetime import datetime
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -70,6 +71,7 @@ class QuestionPaperGenerator:
             # Generate questions using VelociRAPTOR
             questions = []
             answer_key = []
+            previous_questions = []  # Track questions to avoid repetition
             
             for i in range(num_questions):
                 question_type = random.choice(question_types)
@@ -77,10 +79,14 @@ class QuestionPaperGenerator:
                     document_content, 
                     question_type, 
                     difficulty, 
-                    i + 1
+                    i + 1,
+                    previous_questions  # Pass previous questions
                 )
                 questions.append(question)
                 answer_key.append(answer)
+                
+                # Add this question to the list of previous questions
+                previous_questions.append(question['text'])
             
             return {
                 'questions': questions,
@@ -140,53 +146,77 @@ class QuestionPaperGenerator:
             print(f"Error extracting Word content: {e}")
             return "Word document content could not be extracted."
     
-    def _generate_single_question(self, document_content, question_type, difficulty, question_number):
-        """Generate a single question using VelociRAPTOR's RAG capabilities"""
+    def _preprocess_document_content(self, document_content):
+        """Preprocess document content for better question generation"""
+        
+        # Split into chunks for better processing
+        if len(document_content) > 3000:
+            chunks = self.text_splitter.split_text(document_content)
+            # Use the most relevant chunks or summarize
+            document_content = ' '.join(chunks[:2])  # Take first 2 chunks
+        
+        # Clean up formatting
+        document_content = re.sub(r'\s+', ' ', document_content)
+        document_content = re.sub(r'\n+', '\n', document_content)
+        
+        return document_content.strip()
+    
+    def _get_content_chunks(self, document_content, max_chunk_size=600):
+        """Split document content into chunks for variety in question generation"""
+        if len(document_content) <= max_chunk_size:
+            return [document_content]
+        
+        # Split by sentences first, then by paragraphs if needed
+        sentences = re.split(r'[.!?]+', document_content)
+        chunks = []
+        current_chunk = ""
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+                
+            # If adding this sentence would exceed the limit, start a new chunk
+            if len(current_chunk) + len(sentence) + 1 > max_chunk_size and current_chunk:
+                chunks.append(current_chunk.strip())
+                current_chunk = sentence
+            else:
+                current_chunk += (" " + sentence if current_chunk else sentence)
+        
+        # Add the last chunk
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+        
+        # If we still don't have enough chunks, create overlapping chunks
+        if len(chunks) < 3:
+            # Create overlapping chunks of max_chunk_size
+            chunks = []
+            for i in range(0, len(document_content), max_chunk_size // 2):
+                chunk = document_content[i:i + max_chunk_size]
+                if chunk.strip():
+                    chunks.append(chunk.strip())
+                if len(chunks) >= 5:  # Limit to avoid too many chunks
+                    break
+        
+        return chunks if chunks else [document_content[:max_chunk_size]]
+    
+    def _generate_single_question(self, document_content, question_type, difficulty, question_number, previous_questions=None):
+        """Generate a single question using a much simpler approach"""
         try:
             if self.lm_studio_llm is None:
                 return self._generate_fallback_single_question(document_content, question_type, difficulty, question_number)
             
-            # Create a focused question prompt based on the document content
-            if question_type == 'multiple_choice':
-                base_question = f"Generate a {difficulty} difficulty multiple choice question about the content provided"
-            elif question_type == 'short_answer':
-                base_question = f"Generate a {difficulty} difficulty short answer question about the content provided"
-            elif question_type == 'essay':
-                base_question = f"Generate a {difficulty} difficulty essay question about the content provided"
-            else:
-                base_question = f"Generate a {difficulty} difficulty question about the content provided"
+            # Create a very simple, direct prompt
+            prompt = self._create_simple_prompt(document_content, question_type, difficulty, previous_questions)
             
-            # Use VelociRAPTOR's pipeline to generate question and answer
-            question_prompt = f"""
-            You are an expert educational content creator.
-
-            Your task is to generate a {difficulty} level {question_type.replace('_', ' ')} question from the academic content provided below.
-
-            --- Document Content (excerpt) ---
-            {document_content[:2000]}
-            --- End of Content ---
-
-            Instructions:
-            - Base your question strictly on the above content.
-            - Ensure the question is clear and concise.
-            - If the question type is "multiple choice", provide four answer options labeled A), B), C), and D), and clearly indicate the correct answer.
-            - For "short answer" or "essay" types, provide an appropriate model answer.
-
-            Output Format:
-            QUESTION: <your question here>
-            ANSWER: <your answer here>
-            """
-
-
-            # question_prompt = f"""
-            # Hi. How are you?
-            # """
+            # Get response from LLM
+            response = self.lm_studio_llm.invoke(prompt)
             
-            # Use the generation template to get the response
-            response = self.lm_studio_llm.invoke(question_prompt)
+            # Debug: print raw response (can be disabled in production)
+            self._debug_llm_response(response, question_type, question_number)
             
-            # Parse the response to extract question and answer
-            question, answer = self._parse_llm_response(response, question_type, question_number)
+            # Use simple parsing
+            question, answer = self._simple_parse_response(response, question_type, question_number)
             
             return question, answer
             
@@ -194,108 +224,143 @@ class QuestionPaperGenerator:
             print(f"Error generating single question: {e}")
             return self._generate_fallback_single_question(document_content, question_type, difficulty, question_number)
     
-    def _parse_llm_response(self, response, question_type, question_number):
-        """Parse the LLM response to extract question and answer with robust parsing"""
+    def _create_simple_prompt(self, document_content, question_type, difficulty, previous_questions=None):
+        """Create a very simple, direct prompt"""
+        
+        # Use different chunks of content for variety
+        content_chunks = self._get_content_chunks(document_content, 600)
+        
+        # Select a chunk based on how many questions we've already asked
+        chunk_index = len(previous_questions or []) % len(content_chunks)
+        selected_content = content_chunks[chunk_index]
+        
+        print(f"CHUNK DEBUG: Using chunk {chunk_index + 1}/{len(content_chunks)} (length: {len(selected_content)})")
+        if previous_questions:
+            print(f"AVOIDING {len(previous_questions)} previous questions")
+        
+        # Build the previous questions section
+        previous_questions_text = ""
+        if previous_questions and len(previous_questions) > 0:
+            previous_questions_text = "\nDO NOT REPEAT THESE QUESTIONS:\n"
+            for i, prev_q in enumerate(previous_questions, 1):
+                previous_questions_text += f"{i}. {prev_q}\n"
+            previous_questions_text += "\n"
+        
+        if question_type == 'multiple_choice':
+            return f"""TEXT: {selected_content}{previous_questions_text}
+TASK: Write EXACTLY 1 NEW multiple choice question. Use ONLY this format:
+
+Q: [question]
+A) [option]
+B) [option] 
+C) [option]
+D) [option]
+ANSWER: A
+
+NO other text allowed."""
+
+        elif question_type == 'short_answer':
+            return f"""TEXT: {selected_content}{previous_questions_text}
+TASK: Write EXACTLY 1 NEW short answer question. Use ONLY this format:
+
+Q: [question]
+A: [answer]
+
+NO other text allowed."""
+
+        else:  # essay
+            return f"""TEXT: {selected_content}{previous_questions_text}
+TASK: Write EXACTLY 1 NEW essay question. Use ONLY this format:
+
+Q: [question]
+A: [answer]
+
+NO other text allowed."""
+    
+    def _simple_parse_response(self, response, question_type, question_number):
+        """Super simple parsing - just grab what we can"""
         
         try:
-            response = response.strip()
+            lines = response.strip().split('\n')
             question_text = ""
             answer_text = ""
+            options = []
             
-            # Multiple patterns to match different LLM response formats
-            question_patterns = [
-                r'QUESTION:\s*(.+?)(?=ANSWER:|$)',
-                r'Question:\s*(.+?)(?=Answer:|$)', 
-                r'Q:\s*(.+?)(?=A:|$)',
-                r'Q\d*[.)]\s*(.+?)(?=A\d*[.)]|Answer|$)',
-                r'^\d+[.)]\s*(.+?)(?=Answer:|A:|$)',
-                r'Question\s*\d*[:]?\s*(.+?)(?=Answer|A:|$)'
-            ]
+            # Debug: Show what we're trying to parse
+            print(f"PARSING DEBUG: Found {len(lines)} lines")
             
-            answer_patterns = [
-                r'ANSWER:\s*(.+?)$',
-                r'Answer:\s*(.+?)$',
-                r'A:\s*(.+?)$',
-                r'A\d*[.)]\s*(.+?)$',
-                r'(?:Correct answer|Answer):\s*(.+?)$'
-            ]
-            
-            # Try to extract question using patterns
-            for pattern in question_patterns:
-                match = re.search(pattern, response, re.IGNORECASE | re.DOTALL)
-                if match:
-                    question_text = match.group(1).strip()
-                    # Clean up the question text
-                    question_text = re.sub(r'\n+', ' ', question_text)
-                    question_text = re.sub(r'\s+', ' ', question_text)
+            # Find question (line starting with Q:)
+            for line in lines:
+                line = line.strip()
+                if line.startswith('Q:'):
+                    question_text = line[2:].strip()
+                    print(f"PARSING DEBUG: Found question: '{question_text}'")
                     break
             
-            # Try to extract answer using patterns
-            for pattern in answer_patterns:
-                match = re.search(pattern, response, re.IGNORECASE | re.DOTALL)
-                if match:
-                    answer_text = match.group(1).strip()
-                    # Clean up the answer text
-                    answer_text = re.sub(r'\n+', ' ', answer_text)
-                    answer_text = re.sub(r'\s+', ' ', answer_text)
+            # Find answer (line starting with A: or ANSWER:)
+            for line in lines:
+                line = line.strip()
+                if line.startswith('A:'):
+                    answer_text = line[2:].strip()
+                    print(f"PARSING DEBUG: Found answer: '{answer_text}'")
+                    break
+                elif line.startswith('ANSWER:'):
+                    answer_text = line[7:].strip()
+                    print(f"PARSING DEBUG: Found answer (ANSWER:): '{answer_text}'")
                     break
             
-            # Fallback: try to split on common separators
-            if not question_text or not answer_text:
-                parts = re.split(r'(?:answer:|a:|\nanswer|\na:)', response, flags=re.IGNORECASE)
-                if len(parts) >= 2:
-                    if not question_text:
-                        question_text = parts[0].strip()
-                        # Remove common question prefixes
-                        question_text = re.sub(r'^(?:question:|q:|\d+[.)]\s*)', '', question_text, flags=re.IGNORECASE)
-                    if not answer_text:
-                        answer_text = parts[1].strip()
+            # For multiple choice, find options
+            if question_type == 'multiple_choice':
+                for line in lines:
+                    line = line.strip()
+                    if re.match(r'^[A-D]\)', line):
+                        options.append(line)
+                
+                print(f"PARSING DEBUG: Found {len(options)} options")
+                
+                # If we don't have 4 options, use defaults
+                if len(options) != 4:
+                    options = ["A) Option A", "B) Option B", "C) Option C", "D) Option D"]
+                    print("PARSING DEBUG: Using default options")
             
-            # Additional fallback: extract first sentence as question if no clear structure
+            # Extra fallback: if still no Q: found, look for any question mark
             if not question_text:
-                sentences = re.split(r'[.!?]+', response)
-                if sentences:
-                    question_text = sentences[0].strip()
-                    # Ensure it ends with a question mark if it's a question
-                    if question_type in ['multiple_choice', 'short_answer'] and not question_text.endswith('?'):
-                        question_text += '?'
+                print("PARSING DEBUG: No Q: found, looking for question mark...")
+                for line in lines:
+                    line = line.strip()
+                    if '?' in line and not line.startswith(('A)', 'B)', 'C)', 'D)')):
+                        question_text = line
+                        print(f"PARSING DEBUG: Found question by ?: '{question_text}'")
+                        break
             
-            # Final fallback for question
-            if not question_text or len(question_text) < 10:
-                question_text = f"Based on the document content, please explain the main concepts discussed?"
-            
-            # Final fallback for answer
+            # Extra fallback: if still no answer, look for any substantial text
             if not answer_text:
-                # Try to extract remaining text after question
-                remaining_text = response.replace(question_text, '').strip()
-                if remaining_text and len(remaining_text) > 10:
-                    answer_text = remaining_text
-                else:
-                    answer_text = "Please refer to the document content for the answer."
+                print("PARSING DEBUG: No A: found, looking for substantial text...")
+                for line in lines:
+                    line = line.strip()
+                    if len(line) > 10 and not line.startswith(('Q:', 'A:', 'ANSWER:', 'A)', 'B)', 'C)', 'D)')):
+                        answer_text = line
+                        print(f"PARSING DEBUG: Found answer by length: '{answer_text[:50]}...'")
+                        break
             
-            # Validate and clean question text
-            question_text = self._clean_question_text(question_text, question_type)
+            # Check if we're about to use fallbacks
+            if not question_text:
+                print("PARSING DEBUG: Using fallback question")
+                question_text = "What is discussed in the document?"
+            if not answer_text:
+                print("PARSING DEBUG: Using fallback answer")
+                answer_text = "Based on the document content"
             
-            # Validate and clean answer text
-            answer_text = self._clean_answer_text(answer_text, question_type)
-            
+            # Build result
             question = {
                 'id': question_number,
                 'type': question_type,
-                'text': f"Question {question_number}: {question_text}",
+                'text': question_text,
                 'points': self._get_points_by_difficulty_and_type(question_type)
             }
             
             if question_type == 'multiple_choice':
-                # Try to extract options from the response
-                options = self._extract_multiple_choice_options(response)
                 question['options'] = options
-                
-                # If we found options in the response, try to extract the correct answer
-                if len(options) > 0 and any(opt.startswith(('A)', 'B)', 'C)', 'D)')) for opt in options):
-                    correct_answer = self._extract_correct_answer(response, options)
-                    if correct_answer:
-                        answer_text = correct_answer
             
             answer = {
                 'id': question_number,
@@ -303,12 +368,23 @@ class QuestionPaperGenerator:
                 'answer': answer_text
             }
             
+            print(f"PARSING DEBUG: Final result - Q: '{question_text}' A: '{answer_text[:50]}...'")
+            
             return question, answer
             
         except Exception as e:
-            print(f"Error parsing LLM response: {e}")
-            print(f"Raw response: {response[:200]}...")
+            print(f"Error in parsing: {e}")
+            print(f"Exception traceback: {traceback.format_exc()}")
             return self._generate_fallback_single_question("", question_type, "medium", question_number)
+
+    def _generate_default_options(self):
+        """Generate default options when parsing fails"""
+        return [
+            "A) Option A",
+            "B) Option B",
+            "C) Option C", 
+            "D) Option D"
+        ]
     
     def _clean_question_text(self, text, question_type):
         """Clean and validate question text"""
@@ -511,10 +587,13 @@ class QuestionPaperGenerator:
             question_type = random.choice(question_types)
             base_question = random.choice([q for q in fallback_questions if q['type'] == question_type])
             
+            # Add variation to avoid repetition in fallback questions
+            variation_suffix = f" (Question {i + 1})" if i > 0 else ""
+            
             question = {
                 'id': i + 1,
                 'type': question_type,
-                'text': f"Question {i + 1}: {base_question['text']}",
+                'text': f"{base_question['text']}{variation_suffix}",
                 'points': self._get_points_by_difficulty_and_type(question_type)
             }
             
@@ -556,47 +635,82 @@ class QuestionPaperGenerator:
         return question, answer
     
     def generate_pdf(self, questions, answer_key):
-        """Generate a PDF file with questions and answer key"""
+        """Generate a better formatted PDF"""
+        
         try:
-            # Create temporary file
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
             temp_file.close()
             
-            # Create PDF document
-            doc = SimpleDocTemplate(temp_file.name, pagesize=A4)
+            doc = SimpleDocTemplate(
+                temp_file.name, 
+                pagesize=A4,
+                rightMargin=72,
+                leftMargin=72,
+                topMargin=72,
+                bottomMargin=18
+            )
+            
             styles = getSampleStyleSheet()
             story = []
             
-            # Title
+            # Custom styles
             title_style = ParagraphStyle(
                 'CustomTitle',
                 parent=styles['Heading1'],
-                fontSize=18,
+                fontSize=20,
                 alignment=TA_CENTER,
                 spaceAfter=30
             )
+            
+            question_style = ParagraphStyle(
+                'QuestionStyle',
+                parent=styles['Normal'],
+                fontSize=12,
+                spaceAfter=10,
+                leftIndent=0,
+                fontName='Helvetica-Bold'
+            )
+            
+            option_style = ParagraphStyle(
+                'OptionStyle',
+                parent=styles['Normal'],
+                fontSize=11,
+                spaceAfter=5,
+                leftIndent=20
+            )
+            
+            # Title and header
             story.append(Paragraph("Question Paper", title_style))
-            story.append(Spacer(1, 12))
+            story.append(Paragraph("French and Indian War", styles['Heading2']))
+            story.append(Spacer(1, 20))
             
             # Instructions
             instructions = """
-            Instructions:
-            1. Read all questions carefully before answering
-            2. Write your answers clearly and legibly
-            3. Manage your time effectively
-            4. Show your work where applicable
+            <b>Instructions:</b><br/>
+            • Read all questions carefully before answering<br/>
+            • Write your answers clearly and legibly<br/>
+            • Manage your time effectively<br/>
+            • Show your work where applicable
             """
             story.append(Paragraph(instructions, styles['Normal']))
-            story.append(Spacer(1, 20))
+            story.append(Spacer(1, 30))
             
-            # Questions
+            # Questions section
             for i, question in enumerate(questions):
-                question_text = f"Q{question['id']}. {question['text']} ({question['points']} points)"
-                story.append(Paragraph(question_text, styles['Normal']))
+                # Question text
+                question_text = f"<b>Question {question['id']}:</b> {question['text']} <i>({question['points']} points)</i>"
+                story.append(Paragraph(question_text, question_style))
                 
+                # Options for multiple choice
                 if question['type'] == 'multiple_choice' and 'options' in question:
                     for option in question['options']:
-                        story.append(Paragraph(f"    {option}", styles['Normal']))
+                        story.append(Paragraph(option, option_style))
+                
+                # Answer space
+                if question['type'] == 'short_answer':
+                    story.append(Spacer(1, 30))  # Space for writing
+                elif question['type'] == 'essay':
+                    story.append(Spacer(1, 50))  # More space for essay
                 
                 story.append(Spacer(1, 20))
             
@@ -604,26 +718,27 @@ class QuestionPaperGenerator:
             story.append(PageBreak())
             
             # Answer Key
-            answer_title_style = ParagraphStyle(
-                'AnswerTitle',
-                parent=styles['Heading1'],
-                fontSize=16,
-                alignment=TA_CENTER,
-                spaceAfter=20
-            )
-            story.append(Paragraph("Answer Key", answer_title_style))
-            story.append(Spacer(1, 12))
+            story.append(Paragraph("Answer Key", title_style))
+            story.append(Spacer(1, 20))
             
             for answer in answer_key:
-                answer_text = f"A{answer['id']}. {answer['answer']}"
+                answer_text = f"<b>Answer {answer['id']}:</b> {answer['answer']}"
                 story.append(Paragraph(answer_text, styles['Normal']))
-                story.append(Spacer(1, 12))
+                story.append(Spacer(1, 15))
             
             # Build PDF
             doc.build(story)
-            
             return temp_file.name
             
         except Exception as e:
             print(f"Error generating PDF: {e}")
-            raise Exception(f"PDF generation failed: {str(e)}") 
+            raise Exception(f"PDF generation failed: {str(e)}")
+    
+    def _debug_llm_response(self, response, question_type, question_number):
+        """Debug method to see what the LLM is actually returning"""
+        print(f"\n=== DEBUG: Question {question_number} ({question_type}) ===")
+        print(f"Raw LLM Response:")
+        print(f"'{response}'")
+        print(f"Response length: {len(response)}")
+        print(f"Lines: {response.split(chr(10))}")
+        print("=" * 50) 

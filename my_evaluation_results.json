@@ -1,0 +1,72 @@
+{
+  "questions": [
+    {
+      "question": "What time period did the French and Indian War span?",
+      "answer": "The French and Indian War lasted from 1754 to 1763, a period of 9 years.",
+      "type": "short_answer"
+    },
+    {
+      "question": "Which two European nations were the primary adversaries?",
+      "answer": "Great Britain and France were the main combatants in North America.",
+      "type": "short_answer"
+    },
+    {
+      "question": "What geographical region was the main source of conflict?",
+      "answer": "The Ohio River valley was disputed territory that caused the conflict.",
+      "type": "short_answer"
+    },
+    {
+      "question": "How was the conflict resolved?",
+      "answer": "The war ended with the Treaty of Paris in 1763, giving Britain control of French territories.",
+      "type": "short_answer"
+    },
+    {
+      "question": "What role did George Washington play in the early conflict?",
+      "answer": "Washington led Virginia militia forces against the French in 1754.",
+      "type": "short_answer"
+    }
+  ],
+  "evaluation_results": {
+    "avg_exact_match": 0.0,
+    "max_exact_match": 0.0,
+    "min_exact_match": 0.0,
+    "std_exact_match": 0.0,
+    "avg_f1_score": 0.3096443341604632,
+    "max_f1_score": 0.5333333333333333,
+    "min_f1_score": 0.0,
+    "std_f1_score": 0.18728418942230454,
+    "avg_rouge1": 0.0,
+    "max_rouge1": 0.0,
+    "min_rouge1": 0.0,
+    "std_rouge1": 0.0,
+    "avg_rouge2": 0.0,
+    "max_rouge2": 0.0,
+    "min_rouge2": 0.0,
+    "std_rouge2": 0.0,
+    "avg_rougeL": 0.0,
+    "max_rougeL": 0.0,
+    "min_rougeL": 0.0,
+    "std_rougeL": 0.0,
+    "avg_semantic_similarity": 0.20512987012987013,
+    "max_semantic_similarity": 0.38095238095238093,
+    "min_semantic_similarity": 0.0,
+    "std_semantic_similarity": 0.13170513851470858,
+    "avg_question_bleu": 0.0,
+    "max_question_bleu": 0.0,
+    "min_question_bleu": 0.0,
+    "std_question_bleu": 0.0,
+    "avg_question_similarity": 0.22551892551892552,
+    "max_question_similarity": 0.5,
+    "min_question_similarity": 0.07142857142857142,
+    "std_question_similarity": 0.14988435289207483,
+    "avg_type_accuracy": 1.0,
+    "max_type_accuracy": 1.0,
+    "min_type_accuracy": 1.0,
+    "std_type_accuracy": 0.0,
+    "overall_exact_match": 0.0,
+    "overall_f1": 0.3096443341604632,
+    "overall_semantic_similarity": 0.20512987012987013,
+    "total_evaluations": 5
+  },
+  "timestamp": "1751663635.2959104"
+}

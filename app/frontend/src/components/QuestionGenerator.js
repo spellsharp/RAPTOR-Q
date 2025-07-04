@@ -11,7 +11,6 @@ import {
   Download,
   CheckCircle,
   X,
-  AlertCircle,
   Loader
 } from 'lucide-react';
 
@@ -24,8 +23,8 @@ const QuestionGenerator = () => {
   const [generatedAnswers, setGeneratedAnswers] = useState(null);
   const [config, setConfig] = useState({
     numQuestions: 10,
-    difficulty: 'medium',
-    questionTypes: ['multiple_choice', 'short_answer']
+    difficulty: 'easy',
+    questionTypes: ['short_answer']
   });
 
   const onDrop = useCallback(async (acceptedFiles) => {
@@ -129,12 +128,10 @@ const QuestionGenerator = () => {
     }));
   };
 
-  const handleQuestionTypeChange = (type, checked) => {
+  const handleQuestionTypeChange = (type) => {
     setConfig(prev => ({
       ...prev,
-      questionTypes: checked
-        ? [...prev.questionTypes, type]
-        : prev.questionTypes.filter(t => t !== type)
+      questionTypes: [type]  // Only allow one selection for radio buttons
     }));
   };
 
@@ -285,9 +282,11 @@ const QuestionGenerator = () => {
                 ].map(type => (
                   <label key={type.value} className="flex items-center">
                     <input
-                      type="checkbox"
+                      type="radio"
+                      name="questionType"
+                      value={type.value}
                       checked={config.questionTypes.includes(type.value)}
-                      onChange={(e) => handleQuestionTypeChange(type.value, e.target.checked)}
+                      onChange={() => handleQuestionTypeChange(type.value)}
                       className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500"
                     />
                     <span className="text-sm text-gray-700">{type.label}</span>
@@ -308,9 +307,9 @@ const QuestionGenerator = () => {
       >
         <button
           onClick={handleGenerateQuestions}
-          disabled={!fileId || isGenerating || config.questionTypes.length === 0}
+          disabled={!fileId || isGenerating}
           className={`px-8 py-3 rounded-lg font-semibold flex items-center space-x-2 mx-auto transition-colors ${
-            !fileId || isGenerating || config.questionTypes.length === 0
+            !fileId || isGenerating
               ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
               : 'bg-indigo-600 text-white hover:bg-indigo-700'
           }`}
@@ -327,13 +326,7 @@ const QuestionGenerator = () => {
             </>
           )}
         </button>
-        
-        {config.questionTypes.length === 0 && (
-          <p className="text-red-500 text-sm mt-2 flex items-center justify-center">
-            <AlertCircle className="h-4 w-4 mr-1" />
-            Please select at least one question type
-          </p>
-        )}
+
       </motion.div>
 
       {/* Results Section */}

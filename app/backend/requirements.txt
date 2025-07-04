@@ -6,7 +6,7 @@ reportlab==4.0.7
 PyPDF2==3.0.1
 python-docx==1.1.0
 requests==2.31.0
-numpy>=1.26.0
+# numpy>=1.26.0
 langchain==0.1.0
 langchain-community==0.0.10
 pydantic==2.5.0
@@ -14,5 +14,12 @@ tiktoken==0.5.2
 chromadb==0.4.18
 sentence-transformers==2.2.2
 transformers==4.36.0
-torch>=2.1.0
-setuptools>=68.0.0 
+# torch>=2.1.0
+setuptools>=68.0.0
+
+# Evaluation system dependencies
+nltk>=3.8
+rouge-score>=0.1.2
+spacy>=3.4.0
+scikit-learn>=1.3.0
+gpt4all>=2.0.0 
